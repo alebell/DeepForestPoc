@@ -34,9 +34,25 @@ function App() {
     try {
       // Dynamically import the camera module to avoid issues in test envs
       const vision = await import('react-native-vision-camera');
+      // Request camera and microphone permissions
+      const cameraStatus = await vision.Camera.getCameraPermissionStatus();
+      if (cameraStatus !== 'authorized') {
+        const newStatus = await vision.Camera.requestCameraPermission();
+        if (newStatus !== 'authorized') {
+          console.warn('Camera permission not granted');
+          return;
+        }
+      }
+      const micStatus = await vision.Camera.getMicrophonePermissionStatus();
+      if (micStatus !== 'authorized') {
+        const newStatus = await vision.Camera.requestMicrophonePermission();
+        if (newStatus !== 'authorized') {
+          console.warn('Microphone permission not granted');
+          return;
+        }
+      }
 
-      // Request permissions and gather intrinsics
-      await vision.Camera.requestCameraPermission();
+      // Gather intrinsics
       const devices = await vision.Camera.getAvailableCameraDevices();
       const device = devices[0];
       let intrinsics: Intrinsics = {
