@@ -29,6 +29,7 @@ import {
   ArRecordingError,
 } from '../services/recording';
 import ArPreview from '../components/ArPreview';
+import { COLORS } from '../misc/colors';
 
 type Props = { navigation: StackNavigationProp<RootStackParamList, 'Capture'> };
 
@@ -41,10 +42,8 @@ export default function VideoCaptureScreen({ navigation }: Props) {
   const [position, setPosition] = useState<any>(undefined);
   const [sessionReady, setSessionReady] = useState(false);
   const [recordRotation, setRecordRotation] = useState<number>(0);
-
   const insets = useSafeAreaInsets();
   const framesRef = useRef<ArFrameEvent[]>([]);
-
   useEffect(() => {
     const t0 = Date.now();
     arIsSessionReady()
@@ -56,12 +55,10 @@ export default function VideoCaptureScreen({ navigation }: Props) {
         });
       })
       .catch(() => setSessionReady(false));
-
     const subReady = DeviceEventEmitter.addListener('ArSessionReady', () => {
       console.log('[Capture] ArSessionReady event');
       setSessionReady(true);
     });
-
     const pollId = setInterval(async () => {
       const ok = await arIsSessionReady();
       if (ok) {
@@ -70,7 +67,6 @@ export default function VideoCaptureScreen({ navigation }: Props) {
         console.log('[Capture] poll session ready');
       }
     }, 300);
-
     const subStarted = onRecordingStarted(({ uri, rotation }) => {
       console.log('[Capture] onRecordingStarted', { uri, rotation });
       setIsRecording(true);
@@ -92,7 +88,6 @@ export default function VideoCaptureScreen({ navigation }: Props) {
     const subInfo = onFileInfo(e => {
       console.log('[Capture] onFileInfo', e);
     });
-
     return () => {
       subReady.remove();
       subStarted.remove();
@@ -102,7 +97,6 @@ export default function VideoCaptureScreen({ navigation }: Props) {
       clearInterval(pollId);
     };
   }, []);
-
   useEffect(() => {
     let id: any;
     if (isRecording) {
@@ -111,7 +105,6 @@ export default function VideoCaptureScreen({ navigation }: Props) {
     }
     return () => id && clearInterval(id);
   }, [isRecording]);
-
   const elapsedLabel = useMemo(() => {
     const m = Math.floor(elapsed / 60)
       .toString()
@@ -119,7 +112,6 @@ export default function VideoCaptureScreen({ navigation }: Props) {
     const s = (elapsed % 60).toString().padStart(2, '0');
     return `${m}:${s}`;
   }, [elapsed]);
-
   const start = async () => {
     if (loadingStart || isRecording || !sessionReady) return;
     try {
@@ -130,9 +122,9 @@ export default function VideoCaptureScreen({ navigation }: Props) {
         dt: Date.now() - t0,
       });
       setStartTime(new Date().toISOString());
-     //getCurrentLocation()
-     //   .then(setPosition)
-     //   .catch(() => setPosition(undefined));
+      getCurrentLocation()
+        .then(setPosition)
+        .catch(() => setPosition(undefined));
       const out = `${RNFS.CachesDirectoryPath}/ar_recording_${Date.now()}.mp4`;
       await arStartRecording(out);
     } catch (e: any) {
@@ -142,7 +134,6 @@ export default function VideoCaptureScreen({ navigation }: Props) {
       Alert.alert('Start fehlgeschlagen', msg);
     }
   };
-
   const stop = async () => {
     if (!isRecording) return;
     try {
@@ -167,7 +158,12 @@ export default function VideoCaptureScreen({ navigation }: Props) {
       Alert.alert('Stop fehlgeschlagen', msg);
     }
   };
-
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('ArFrameEvent', (e: any) => {
+      framesRef.current.push(e as any);
+    });
+    return () => sub.remove();
+  }, []);
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" />
@@ -176,10 +172,9 @@ export default function VideoCaptureScreen({ navigation }: Props) {
           style={StyleSheet.absoluteFill}
           depthEnabled={false}
           planeDetection="disabled"
-          frameEventsEnabled={false}
+          frameEventsEnabled={true}
         />
       </View>
-
       <SafeAreaView
         pointerEvents="box-none"
         style={[styles.bottomBar, { paddingBottom: insets.bottom + 8 }]}
@@ -199,7 +194,6 @@ export default function VideoCaptureScreen({ navigation }: Props) {
             <Text style={styles.iconText}>←</Text>
           </Pressable>
         </View>
-
         <View style={styles.centerArea}>
           <Pressable
             accessibilityRole="button"
@@ -223,7 +217,6 @@ export default function VideoCaptureScreen({ navigation }: Props) {
             />
           </Pressable>
         </View>
-
         <View style={[styles.side, { alignItems: 'flex-end' }]}>
           <View style={styles.timerWrap}>
             {isRecording && <View style={styles.dot} />}
@@ -239,21 +232,12 @@ export default function VideoCaptureScreen({ navigation }: Props) {
           </View>
         </View>
       </SafeAreaView>
-
       <View pointerEvents="none" style={styles.fadeBottom} />
     </View>
   );
 }
 
-const COLORS = {
-  bg: '#0b0b0f',
-  text: '#ffffff',
-  textMuted: 'rgba(255,255,255,0.7)',
-  accent: '#ff3b30',
-  accentDim: 'rgba(255,59,48,0.35)',
-  surface: 'rgba(255,255,255,0.10)',
-  surfacePressed: 'rgba(255,255,255,0.18)',
-};
+
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
@@ -317,6 +301,6 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 160,
-    backgroundColor: 'rgba(0,0,0,0.33)',
+    backgroundColor: COLORS.bgFaded,
   },
 });

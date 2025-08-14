@@ -5,19 +5,16 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import VideoComp from 'react-native-video';
-import RNFS from 'react-native-fs';
-import { supabase } from '../services/supabase';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../navigation/AppNavigator';
-import { Buffer } from 'buffer';
+import { COLORS } from '../misc/colors';
 
 type ReviewScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -34,57 +31,15 @@ export default function ReviewScreen({ navigation, route }: Props) {
   const { video, meta } = route.params as any;
   const insets = useSafeAreaInsets();
   const playerRef = useRef<VideoRef>(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploading] = useState(false);
   const [paused, setPaused] = useState(true);
-
   const sourceUri = useMemo(() => {
     const p = video.path || '';
     return p.startsWith('file://') ? p : `file://${p}`;
   }, [video.path]);
-
-  const ensureFilePath = async (uri: string) => {
-    if (uri.startsWith('file://')) return uri;
-    if (uri.startsWith('content://')) {
-      const tmp = `${RNFS.CachesDirectoryPath}/tmp_${Date.now()}.mp4`;
-      await RNFS.copyFile(uri, tmp);
-      return `file://${tmp}`;
-    }
-    return uri;
+  const useRecording = () => {
+    navigation.replace('Start', { newItem: { path: video.path, meta } });
   };
-
-  const upload = async () => {
-    setUploading(true);
-    try {
-      const src = await ensureFilePath(sourceUri);
-      const p = src.replace('file://', '');
-      const base64 = await RNFS.readFile(p, 'base64');
-      const buf = Buffer.from(base64, 'base64');
-      const bytes = buf.buffer.slice(
-        buf.byteOffset,
-        buf.byteOffset + buf.byteLength,
-      );
-      const fileName = `video_${Date.now()}.mp4`;
-      const { data, error } = await supabase.storage
-        .from('videos')
-        .upload(
-          fileName,
-          bytes as ArrayBuffer,
-          { contentType: 'video/mp4', upsert: false } as any,
-        );
-      if (error) throw error;
-      await supabase
-        .from('videometadata')
-        .insert([
-          { meta: JSON.stringify(meta), video_url: data?.path || fileName },
-        ]);
-      navigation.replace('Start');
-    } catch (err: any) {
-      Alert.alert('Upload fehlgeschlagen', err?.message ?? String(err));
-    } finally {
-      setUploading(false);
-    }
-  };
-
   return (
     <View style={styles.root}>
       <SafeAreaView
@@ -95,7 +50,6 @@ export default function ReviewScreen({ navigation, route }: Props) {
           {new Date(meta.startTime).toLocaleString()}
         </Text>
       </SafeAreaView>
-
       <View style={styles.playerWrap}>
         <VideoComp
           ref={playerRef}
@@ -108,7 +62,6 @@ export default function ReviewScreen({ navigation, route }: Props) {
           onEnd={() => setPaused(true)}
         />
       </View>
-
       <SafeAreaView
         style={[
           styles.bottomBar,
@@ -117,29 +70,20 @@ export default function ReviewScreen({ navigation, route }: Props) {
       >
         <Pressable
           onPress={() => navigation.replace('Capture')}
-          style={({ pressed }) => [
-            styles.secondaryBtn,
-            pressed && styles.secondaryBtnPressed,
-          ]}
+          style={styles.secondaryBtn}
         >
           <Text style={styles.secondaryText}>Neu aufnehmen</Text>
         </Pressable>
-
         <Pressable
-          onPress={upload}
+          onPress={useRecording}
           disabled={uploading}
-          style={({ pressed }) => [
-            styles.primaryBtn,
-            pressed && styles.primaryBtnPressed,
-            uploading && styles.primaryBtnDisabled,
-          ]}
+          style={styles.primaryBtn}
         >
           <Text style={styles.primaryText}>
             {uploading ? 'Wird gesendet…' : 'Verwenden'}
           </Text>
         </Pressable>
       </SafeAreaView>
-
       {uploading && (
         <View style={styles.blocker}>
           <ActivityIndicator />
@@ -149,17 +93,6 @@ export default function ReviewScreen({ navigation, route }: Props) {
     </View>
   );
 }
-
-const COLORS = {
-  bg: '#0b0b0f',
-  text: '#ffffff',
-  textMuted: 'rgba(255,255,255,0.7)',
-  surface: 'rgba(255,255,255,0.10)',
-  surfacePressed: 'rgba(255,255,255,0.18)',
-  primary: '#4cd964',
-  primaryPressed: '#39bf53',
-  primaryDisabled: 'rgba(76,217,100,0.5)',
-};
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
@@ -187,15 +120,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: COLORS.primary,
   },
-  primaryBtnPressed: { backgroundColor: COLORS.primaryPressed },
-  primaryBtnDisabled: { backgroundColor: COLORS.primaryDisabled },
-  primaryText: { color: '#0b0b0f', fontWeight: '700' },
+  primaryText: { color: COLORS.text, fontWeight: '600' },
   blocker: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    backgroundColor: COLORS.bg,
   },
-  blockerText: { color: COLORS.textMuted },
+  blockerText: { color: COLORS.text, marginTop: 12 },
 });
