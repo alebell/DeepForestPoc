@@ -15,6 +15,8 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { COLORS } from '../misc/colors';
+import { uploadVideoAndJson } from '../services/upload';
+import Toast from 'react-native-toast-message';
 
 type ReviewScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -31,14 +33,45 @@ export default function ReviewScreen({ navigation, route }: Props) {
   const { video, meta } = route.params as any;
   const insets = useSafeAreaInsets();
   const playerRef = useRef<VideoRef>(null);
-  const [uploading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [paused, setPaused] = useState(true);
   const sourceUri = useMemo(() => {
     const p = video.path || '';
     return p.startsWith('file://') ? p : `file://${p}`;
   }, [video.path]);
-  const useRecording = () => {
-    navigation.replace('Start', { newItem: { path: video.path, meta } });
+  const useRecording = async () => {
+    if (uploading) return;
+    try {
+      setUploading(true);
+      await uploadVideoAndJson(video.path, meta);
+      Toast.show({
+        type: 'success',
+        text1: 'Upload abgeschlossen',
+        text2: 'Video & ARCore JSON wurden hochgeladen.',
+      });
+      navigation.replace('Start', { newItem: { path: video.path, meta } });
+    } catch (e: any) {
+      console.log('[Review] Upload failed', e);
+      /*
+      Toast.show({
+        type: 'error',
+        text1: 'Upload fehlgeschlagen',
+        text2: e?.message ?? String(e),
+      });
+      */
+      const msg = (e?.message ?? String(e)) as string;
+      // Heuristics for better UX:
+      const isFileRead = /File read|base64|ENOENT|EACCES|permission/i.test(msg);
+      Toast.show({
+        type: 'error',
+        text1: isFileRead
+          ? 'Datei konnte nicht gelesen werden'
+          : 'Upload fehlgeschlagen',
+        text2: msg,
+      });
+    } finally {
+      setUploading(false);
+    }
   };
   return (
     <View style={styles.root}>
